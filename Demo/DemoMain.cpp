@@ -6,83 +6,89 @@
 ////////////////////////////////////////////////////////////////////
 
 #include "GLFW/glfw3.h"
-
 #include <iostream>
-#include <format>
+
 
 void errorCallback(int error, const char* description) {
     std::cerr << std::format("Error - {}: {}\n", error, description);
 }
 
-struct glfw_manager {
-    glfw_manager() {
-        glfwSetErrorCallback(errorCallback);
 
-        if(!glfwInit())
-            throw std::runtime_error{"Failed to initialize GLFW\n"};
-    }
-
-    glfw_manager(const glfw_manager&) = delete;
-
-    glfw_manager& operator=(const glfw_manager&) = delete;
-
-    ~glfw_manager() { glfwTerminate(); }
-};
-
-class window {
+class Window {
     GLFWwindow* m_Window{};
-public:
-    window() {
+
+    inline static void set_window_creation_hints_preset() {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-        m_Window = glfwCreateWindow(800, 600, "Hello GLFW", nullptr, nullptr);
-        if(!m_Window)
-            throw std::runtime_error{"Failed to create GLFW window"};
-
-        glfwMakeContextCurrent(m_Window);
     }
 
-    window(const window&) = delete;
+public:
+    Window(int width, int height, const char* title, bool setPresetCreationHints = false) {
+        // Don't set the global window hints by default as to minimize accidental side-effects.
+        if (setPresetCreationHints) set_window_creation_hints_preset();
 
-    window& operator=(const window&) = delete;
+        m_Window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+        if (!m_Window)
+            throw std::runtime_error("Failed to create GLFW window");
+    }
 
-    ~window() { glfwDestroyWindow(m_Window); }
+    ~Window() {
+        glfwDestroyWindow(m_Window);
+    }
+
+    // As the constructor and destructor are mostly pure (from my understanding), we can preserve the copy and assignment operators.
+    // This way, we'll still be able to create multiple windows if we want to.
 
     GLFWwindow& get() {
-        if(!m_Window) throw std::runtime_error{"No window!"};
+        if (!m_Window) throw std::runtime_error("Failed to retrieve window!");
         return *m_Window;
     }
 };
 
-int main()
-{
-    try
-    {
-        glfw_manager manager{};
-        window w{};
 
-        while(!glfwWindowShouldClose(&w.get())) {
-            // Render here (optional)
-            //glClear(GL_COLOR_BUFFER_BIT);
+// Somewhat forced to make this into its own scope/function so that appWindow gets 
+// destroyed before glfwTerminate() is called (we get an error otherwise). Not ideal.
+void main_loop() {
+    Window appWindow(800, 600, "Hello GLFW", true);
+    // this call is intentionally left outside the Window constructor as it has side-effects (detaches any current context)
+    glfwMakeContextCurrent(&appWindow.get());
 
-            // Swap front and back buffers
-            glfwSwapBuffers(&w.get());
+    while (!glfwWindowShouldClose(&appWindow.get())) {
+        // Render here (optional)
+        //glClear(GL_COLOR_BUFFER_BIT);
 
-            // Poll for and process events
-            glfwPollEvents();
-        }
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what();
-    }
-    catch(...)
-    {
-        std::cerr << "Unrecognized error\n";
+        // Swap front and back buffers
+        glfwSwapBuffers(&appWindow.get());
+
+        // Poll for and process events
+        glfwPollEvents();
     }
 }
 
+int main() {
+    try {
+        glfwSetErrorCallback(errorCallback);
+        if (!glfwInit()) {
+            throw std::runtime_error("Failed to initialize GLFW\n");
+            return -1;
+        }
 
+        main_loop();
+
+        glfwTerminate();
+        return 0;
+    }
+
+    catch (const std::exception& e)
+    {
+        std::cerr << e.what();
+        glfwTerminate();
+    }
+    catch (...)
+    {
+        std::cerr << "Unrecognized error\n";
+        glfwTerminate();
+    }
+}
